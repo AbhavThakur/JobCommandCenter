@@ -1,55 +1,28 @@
 import { useState } from "react";
-import { useStore } from "./store/useStore";
-import { PROFILES } from "./data/constants";
-import Dashboard from "./pages/Dashboard";
-import Search from "./pages/Search";
-import Tracker from "./pages/Tracker";
-import Companies from "./pages/Companies";
-
-const PAGES = ["dashboard", "search", "tracker", "companies"];
+import Sidebar from "./components/Sidebar";
+import GrowthDashboard from "./pages/GrowthDashboard";
+import Career from "./pages/Career";
+import HealthPage from "./pages/HealthPage";
+import WealthPage from "./pages/WealthPage";
+import AILabPage from "./pages/AILabPage";
+import ErrorBoundary from "./components/ErrorBoundary";
+import AuthGate from "./components/AuthGate";
 
 export default function App() {
-  const [page, setPage] = useState("dashboard");
-  const { activeProfile, switchProfile } = useStore();
+  const [page, setPage] = useState("home");
 
   return (
-    <>
-      <nav className="topnav">
-        <div className="nav-brand">
-          <div className="dot" />
-          <span>Job Command Center</span>
+    <ErrorBoundary>
+      <AuthGate>
+        <Sidebar page={page} setPage={setPage} />
+        <div className="gos-main">
+          {page === "home" && <GrowthDashboard />}
+          {page === "career" && <Career />}
+          {page === "health" && <HealthPage />}
+          {page === "wealth" && <WealthPage />}
+          {page === "ailab" && <AILabPage />}
         </div>
-        <div className="nav-tabs">
-          {PAGES.map((p) => (
-            <button
-              key={p}
-              className={`nav-tab${page === p ? " active" : ""}`}
-              onClick={() => setPage(p)}
-            >
-              {p.charAt(0).toUpperCase() + p.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div className="nav-right">
-          <div className="profile-switcher">
-            {Object.keys(PROFILES).map((id) => (
-              <button
-                key={id}
-                className={`profile-btn${activeProfile === id ? " active" : ""}`}
-                onClick={() => switchProfile(id)}
-              >
-                {id === "abhav" ? "Abhav" : "Wife (PM)"}
-              </button>
-            ))}
-          </div>
-        </div>
-      </nav>
-      <div className="main">
-        {page === "dashboard" && <Dashboard onNavigate={setPage} />}
-        {page === "search" && <Search />}
-        {page === "tracker" && <Tracker />}
-        {page === "companies" && <Companies />}
-      </div>
-    </>
+      </AuthGate>
+    </ErrorBoundary>
   );
 }

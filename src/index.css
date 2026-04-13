@@ -1,40 +1,49 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 :root {
-  --bg: #06080f;
-  --bg2: #0b0f1a;
-  --surface: rgba(15, 20, 35, 0.85);
-  --surface-solid: #0f1423;
-  --surface2: #151c2e;
-  --surface3: #1a2338;
+  --bg: #080b10;
+  --bg2: #070a10;
+  --surface: rgba(13, 17, 28, 0.85);
+  --surface-solid: #0f1219;
+  --surface2: #161b27;
+  --surface3: #1c2232;
   --border: rgba(255, 255, 255, 0.06);
   --border-hover: rgba(255, 255, 255, 0.12);
   --accent: #6366f1;
   --accent-bright: #818cf8;
   --accent2: #22d3ee;
   --green: #34d399;
-  --green-dim: rgba(52, 211, 153, 0.15);
+  --green-dim: rgba(52, 211, 153, 0.12);
+  --green-border: rgba(52, 211, 153, 0.25);
   --orange: #fbbf24;
-  --orange-dim: rgba(251, 191, 36, 0.15);
+  --orange-dim: rgba(251, 191, 36, 0.12);
   --red: #f87171;
-  --red-dim: rgba(248, 113, 113, 0.15);
+  --red-dim: rgba(248, 113, 113, 0.12);
+  --red-border: rgba(248, 113, 113, 0.25);
   --purple: #a78bfa;
-  --purple-dim: rgba(167, 139, 250, 0.15);
+  --purple-dim: rgba(167, 139, 250, 0.12);
+  --purple-border: rgba(167, 139, 250, 0.25);
   --pink: #f472b6;
   --cyan: #22d3ee;
-  --text: #f1f5f9;
-  --text2: #cbd5e1;
-  --muted: #64748b;
+  --teal: #2dd4bf;
+  --teal-dim: rgba(45, 212, 191, 0.1);
+  --teal-border: rgba(45, 212, 191, 0.22);
+  --amber: #fbbf24;
+  --amber-dim: rgba(251, 191, 36, 0.1);
+  --amber-border: rgba(251, 191, 36, 0.22);
+  --text: #e8edf5;
+  --text2: #b8c4d8;
+  --muted: #566070;
   --mono: "JetBrains Mono", monospace;
   --sans: "Inter", system-ui, -apple-system, sans-serif;
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 16px;
   --radius-xl: 20px;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.08);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 40px rgba(45, 212, 191, 0.08);
   --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -58,35 +67,42 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Subtle gradient mesh background */
+/* Premium aurora gradient background */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   background:
     radial-gradient(
-      ellipse 80% 50% at 20% 0%,
-      rgba(99, 102, 241, 0.08),
-      transparent 60%
+      ellipse 100% 60% at 10% -10%,
+      rgba(45, 212, 191, 0.07) 0%,
+      transparent 55%
     ),
     radial-gradient(
-      ellipse 60% 40% at 80% 100%,
-      rgba(34, 211, 238, 0.05),
-      transparent 50%
+      ellipse 80% 50% at 90% 10%,
+      rgba(99, 102, 241, 0.07) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 60% 40% at 50% 100%,
+      rgba(167, 139, 250, 0.05) 0%,
+      transparent 60%
     );
   pointer-events: none;
   z-index: 0;
 }
 
-/* Grid overlay */
+/* Subtle dot-grid overlay */
 body::after {
   content: "";
   position: fixed;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-  background-size: 60px 60px;
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px
+  );
+  background-size: 28px 28px;
   pointer-events: none;
   z-index: 0;
 }
@@ -94,6 +110,22 @@ body::after {
 #root {
   position: relative;
   z-index: 1;
+}
+
+/* Loading spinner */
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--teal);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 ::selection {
@@ -436,17 +468,45 @@ body::after {
 
 /* ───────────── Cards ───────────── */
 .card {
-  background: var(--surface);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
+  background: rgba(15, 18, 26, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: var(--radius-lg);
   padding: 22px;
   margin-bottom: 16px;
   transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(45, 212, 191, 0.15) 50%,
+    transparent
+  );
+  opacity: 0;
+  transition: opacity var(--transition);
 }
 
 .card:hover {
-  border-color: var(--border-hover);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+  box-shadow:
+    var(--shadow),
+    0 0 0 1px rgba(45, 212, 191, 0.04);
+}
+
+.card:hover::before {
+  opacity: 1;
 }
 
 .card h3 {
@@ -1496,4 +1556,76 @@ body::after {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Growth OS — Sidebar Layout System
+   ═══════════════════════════════════════════════════════ */
+
+/* Main content area: offset by sidebar width on desktop */
+.gos-main {
+  margin-left: 240px;
+  min-height: 100vh;
+  padding: 28px 32px;
+  max-width: 1200px;
+  animation: pageEnter 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hamburger: hidden on desktop */
+.gos-mobile-hamburger {
+  display: none !important;
+}
+
+/* Drawer slide animation */
+@keyframes drawerSlideIn {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ── Mobile responsive: sidebar becomes overlay ── */
+@media (max-width: 768px) {
+  /* Hide desktop sidebar */
+  .gos-sidebar {
+    display: none !important;
+  }
+
+  /* Show hamburger */
+  .gos-mobile-hamburger {
+    display: flex !important;
+  }
+
+  /* Remove sidebar offset */
+  .gos-main {
+    margin-left: 0;
+    padding: 64px 16px 24px;
+  }
+
+  /* Existing topnav: hide since we use sidebar now */
+  .topnav {
+    display: none;
+  }
+}
+
+/* ── Tablet ── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .gos-main {
+    padding: 24px 20px;
+  }
 }
