@@ -41,12 +41,12 @@ export default function WealthCard() {
     setSyncing(true);
     setSyncError("");
     try {
-      // Try WealthOS Firestore path: households/{uid}/profile or users/{uid}/growthOS/wealthSnapshot
-      const snap = await getDoc(
+      // Fast path: GrowthOS snapshot written by WealthOS DataContext auto-sync
+      const snapDoc = await getDoc(
         doc(db, "users", user.uid, "growthOS", "wealthSnapshot"),
       );
-      if (snap.exists()) {
-        const d = snap.data();
+      if (snapDoc.exists()) {
+        const d = snapDoc.data();
         setData((prev) => ({
           ...prev,
           netWorth: String(d.netWorth ?? prev.netWorth),
@@ -55,9 +55,121 @@ export default function WealthCard() {
           lastUpdated: new Date().toISOString(),
         }));
         setIsStale(false);
-      } else {
-        setSyncError("No synced data found — update from WealthOS first");
+        return;
       }
+
+      // Fallback: compute directly from WealthOS households data
+      // Try both "data" (prod) and "dev_data" (dev) subcollections
+      const trySubcol = async (subcol) => {
+        const [p1Snap, p2Snap] = await Promise.all([
+          getDoc(doc(db, "households", user.uid, subcol, "person1")),
+          getDoc(doc(db, "households", user.uid, subcol, "person2")),
+        ]);
+        return [p1Snap, p2Snap];
+      };
+
+      let p1Snap, p2Snap;
+      [p1Snap, p2Snap] = await trySubcol("data");
+      if (!p1Snap.exists() && !p2Snap.exists()) {
+        [p1Snap, p2Snap] = await trySubcol("dev_data");
+      }
+
+      if (!p1Snap.exists() && !p2Snap.exists()) {
+        setSyncError("No WealthOS data found for your account");
+        return;
+      }
+
+      const now = new Date();
+      const computePersonNW = (data) => {
+        if (!data) return 0;
+        const invTotal = (data.investments || []).reduce((s, inv) => {
+          if (inv.type === "FD") {
+            const start = inv.startDate ? new Date(inv.startDate) : now;
+            const elapsed = Math.max(0, (now - start) / (365.25 * 86400000));
+            const r = inv.returnPct / 100;
+            return s + (inv.amount || 0) * Math.pow(1 + r, elapsed);
+          }
+          if (inv.frequency === "onetime") {
+            const start = inv.startDate ? new Date(inv.startDate) : now;
+            const elapsed = Math.max(0, (now - start) / (365.25 * 86400000));
+            const r = inv.returnPct / 100;
+            const corpus = (inv.existingCorpus || 0) + (inv.amount || 0);
+            return s + corpus * Math.pow(1 + r, elapsed);
+          }
+          return s + (inv.existingCorpus || 0);
+        }, 0);
+        const manualAssets = (data.assets || []).reduce(
+          (s, a) => s + (a.value || 0),
+          0,
+        );
+        const savings = (data.savingsAccounts || []).reduce(
+          (s, a) => s + (a.balance || 0),
+          0,
+        );
+        const debts = (data.debts || []).reduce(
+          (s, d) => s + (d.outstanding || 0),
+          0,
+        );
+        const manualLiab = (data.liabilities || []).reduce(
+          (s, l) => s + (l.value || 0),
+          0,
+        );
+        return invTotal + manualAssets + savings - debts - manualLiab;
+      };
+
+      const freqToMonthly = (amt, freq) => {
+        if (!amt) return 0;
+        if (freq === "yearly") return amt / 12;
+        if (freq === "quarterly") return amt / 3;
+        if (freq === "onetime" || freq === "once") return 0;
+        return amt;
+      };
+
+      const p1 = p1Snap.exists() ? p1Snap.data() : null;
+      const p2 = p2Snap.exists() ? p2Snap.data() : null;
+
+      const netWorth = Math.round(computePersonNW(p1) + computePersonNW(p2));
+      const sip = Math.round(
+        (p1?.investments || []).reduce(
+          (s, x) => s + freqToMonthly(x.amount, x.frequency),
+          0,
+        ) +
+          (p2?.investments || []).reduce(
+            (s, x) => s + freqToMonthly(x.amount, x.frequency),
+            0,
+          ),
+      );
+      const p1Income = (p1?.incomes || []).reduce(
+        (s, x) => s + (x.amount || 0),
+        0,
+      );
+      const p2Income = (p2?.incomes || []).reduce(
+        (s, x) => s + (x.amount || 0),
+        0,
+      );
+      const totalIncome = p1Income + p2Income;
+      const p1Exp = (p1?.expenses || []).reduce(
+        (s, x) => s + (x.expenseType === "onetime" ? 0 : x.amount || 0),
+        0,
+      );
+      const p2Exp = (p2?.expenses || []).reduce(
+        (s, x) => s + (x.expenseType === "onetime" ? 0 : x.amount || 0),
+        0,
+      );
+      const leftover = totalIncome - p1Exp - p2Exp - sip;
+      const savingsRate =
+        totalIncome > 0
+          ? Math.round(((sip + Math.max(0, leftover)) / totalIncome) * 100)
+          : 0;
+
+      setData((prev) => ({
+        ...prev,
+        netWorth: String(netWorth),
+        sip: String(sip),
+        savingsRate: String(savingsRate),
+        lastUpdated: new Date().toISOString(),
+      }));
+      setIsStale(false);
     } catch {
       setSyncError("Sync failed — check your Firebase connection");
     } finally {

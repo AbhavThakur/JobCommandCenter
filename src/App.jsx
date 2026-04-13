@@ -5,6 +5,7 @@ import Career from "./pages/Career";
 import HealthPage from "./pages/HealthPage";
 import WealthPage from "./pages/WealthPage";
 import AILabPage from "./pages/AILabPage";
+import ProgressPage from "./pages/ProgressPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import AuthGate from "./components/AuthGate";
 
@@ -17,6 +18,7 @@ export default function App() {
         <Sidebar page={page} setPage={setPage} />
         <div className="gos-main">
           {page === "home" && <GrowthDashboard />}
+          {page === "progress" && <ProgressPage />}
           {page === "career" && <Career />}
           {page === "health" && <HealthPage />}
           {page === "wealth" && <WealthPage />}

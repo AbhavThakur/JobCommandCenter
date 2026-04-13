@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import RaceRadar from "../components/RaceRadar";
 import DailySchedule from "../components/DailySchedule";
 import WealthCard from "../components/WealthCard";
+import DailyScore from "../components/DailyScore";
+import DailyJournal from "../components/DailyJournal";
+import GoalTracker from "../components/GoalTracker";
 import { useAuth } from "../context/AuthContext";
 
 function getGreeting() {
@@ -65,16 +68,23 @@ export default function GrowthDashboard() {
         </div>
       </div>
 
+      {/* Daily score ring */}
+      <div style={{ marginBottom: 20 }}>
+        <DailyScore />
+      </div>
+
       {/* Full width row 1 — Race / Active Goal */}
       <RaceRadar />
 
-      {/* Row 2: Schedule (2/3) + Wealth snapshot (1/3) */}
+      {/* Row 2: Schedule (2/3) + right column (1/3) */}
       <div style={styles.gridRow2}>
         <div style={styles.col2of3}>
           <DailySchedule />
+          <DailyJournal />
         </div>
         <div style={styles.col1of3}>
           <WealthCard />
+          <GoalTracker />
         </div>
       </div>
     </div>
@@ -155,7 +165,17 @@ const styles = {
     gap: 20,
     marginBottom: 40,
   },
-  col2of3: { flex: "2 1 400px" },
-  col1of3: { flex: "1 1 200px" },
+  col2of3: {
+    flex: "2 1 400px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 20,
+  },
+  col1of3: {
+    flex: "1 1 200px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 20,
+  },
   colHalf: { flex: "1 1 300px" },
 };
