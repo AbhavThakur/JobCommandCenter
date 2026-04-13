@@ -54,7 +54,7 @@ export const SCHEDULE = {
         time: "8:45 AM",
         label: "Morning Bonus — 45 min",
         detail: "Read: Zerodha Varsity Module 1, one chapter",
-        url: "https://varsity.zerodha.com/modules/",
+        url: "https://zerodha.com/varsity/modules/",
         pillar: "teal",
       },
       {
@@ -141,7 +141,7 @@ export const SCHEDULE = {
         time: "10:00 AM",
         label: "Office Break — 30 min",
         detail: "Read: Moneycontrol or Zerodha Varsity Module 3",
-        url: "https://varsity.zerodha.com/modules/",
+        url: "https://zerodha.com/varsity/modules/",
         pillar: "teal",
       },
       {
@@ -266,7 +266,7 @@ export const SCHEDULE = {
         time: "Evening",
         label: "Optional — 20 min",
         detail: "Browse Zerodha Varsity or Farnam Street",
-        url: "https://varsity.zerodha.com/modules/",
+        url: "https://zerodha.com/varsity/modules/",
         pillar: "rest",
       },
     ],

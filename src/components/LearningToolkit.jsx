@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 
 const RESOURCES = [
-  { tag: "Investing · Free", title: "Zerodha Varsity", desc: "Best free course for Indian investors. Start Module 1, go deep.", type: "teal", url: "https://varsity.zerodha.com" },
+  { tag: "Investing · Free", title: "Zerodha Varsity", desc: "Best free course for Indian investors. Start Module 1, go deep.", type: "teal", url: "https://zerodha.com/varsity/modules/" },
   { tag: "Investing · Book", title: "Psychology of Money", desc: "Morgan Housel. Why smart people make bad financial decisions.", type: "teal", url: "#" },
   { tag: "Podcast · Commute", title: "Paisa Vaisa", desc: "English personal finance podcast built for Indians.", type: "teal", url: "https://open.spotify.com/show/4P2QGlsIfhHkYhXy2HnXZo" },
   { tag: "AI · Free", title: "Claude Prompt Guide", desc: "docs.anthropic.com — official prompting techniques. Hands-on.", type: "purple", url: "https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview" },
