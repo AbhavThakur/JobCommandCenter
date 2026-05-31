@@ -1,6 +1,20 @@
+/**
+ * careerData.js — Firestore service for the Career section.
+ *
+ * Schema:
+ *   companies/{id}              — global, shared catalog
+ *   users/{uid}/jobs/{id}       — per-user job entries
+ *   users/{uid}/searchRuns/{id} — per-user async scan runs
+ *   users/{uid}/pipeline/{id}   — per-user application tracker
+ *   users/{uid}/reports/{id}    — per-user eval report metadata
+ *
+ * The worker (career-ops) uses firebase-admin and bypasses Firestore rules.
+ */
+
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   limit,
@@ -8,13 +22,13 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { getDownloadURL, ref } from "firebase/storage";
 import { auth, db, storage } from "../firebase";
 import { DEFAULT_COMPANIES } from "../data/companies";
 import seedCompaniesData from "../data/seedCompanies";
-import seedJobsData from "../data/seed-jobs.js";
 
 const CAREER_API_BASE_URL = import.meta.env.VITE_CAREER_API_BASE_URL?.replace(
   /\/$/,
@@ -26,31 +40,41 @@ function requireFirestore() {
   return db;
 }
 
-function withId(docSnap) {
-  return {
-    id: docSnap.id,
-    ...docSnap.data(),
-  };
+function requireUid() {
+  const uid = auth?.currentUser?.uid;
+  if (!uid) throw new Error("Sign in required.");
+  return uid;
+}
+
+function userCol(name) {
+  return collection(requireFirestore(), "users", requireUid(), name);
+}
+
+function userDoc(name, id) {
+  return doc(requireFirestore(), "users", requireUid(), name, id);
+}
+
+function withId(snap) {
+  return { id: snap.id, ...snap.data() };
 }
 
 function toMillis(value) {
   if (!value) return 0;
   if (typeof value.toMillis === "function") return value.toMillis();
   if (typeof value.toDate === "function") return value.toDate().getTime();
-
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-}
-
-function sortCompanies(a, b) {
-  return (a.name || "").localeCompare(b.name || "");
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
 function sortJobs(a, b) {
   return (
-    toMillis(b.lastScannedAt || b.firstSeenAt) -
-    toMillis(a.lastScannedAt || a.firstSeenAt)
+    toMillis(b.lastScannedAt || b.firstSeenAt || b.updatedAt) -
+    toMillis(a.lastScannedAt || a.firstSeenAt || a.updatedAt)
   );
+}
+
+function sortCompanies(a, b) {
+  return (a.name || "").localeCompare(b.name || "");
 }
 
 function roleConstraints(roleId) {
@@ -68,76 +92,71 @@ function slugify(value) {
   );
 }
 
-function roleIdsForCompany(company) {
-  if (Array.isArray(company.roleIds) && company.roleIds.length > 0) {
-    return company.roleIds;
-  }
-  if (company.profile === "abhav") return ["mobile_frontend"];
-  if (company.profile === "wife") return ["product_manager"];
-  return ["mobile_frontend", "product_manager"];
-}
-
-function uniqueSeedCompanies() {
-  const byId = new Map();
-  for (const company of [...DEFAULT_COMPANIES, ...seedCompaniesData]) {
-    const id = company.id || slugify(company.name);
-    const existing = byId.get(id);
-    byId.set(id, {
-      ...existing,
-      ...company,
-      id,
-      roleIds: roleIdsForCompany(company),
-      tags: [...new Set([...(existing?.tags || []), ...(company.tags || [])])],
-      priority: Math.max(existing?.priority || 0, company.priority || 1),
-      seededAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-  }
-  return [...byId.values()];
-}
-
-function notifyConfigError(onChange, onError) {
-  onChange([]);
-  onError?.(new Error("Firebase is not configured for career data."));
-  return () => {};
-}
-
-export async function getCareerCompanies(roleId = "all") {
-  const firestore = requireFirestore();
-  const snapshot = await getDocs(
-    query(
-      collection(firestore, "companies"),
-      ...roleConstraints(roleId),
-      limit(200),
-    ),
-  );
-
-  return snapshot.docs.map(withId).sort(sortCompanies);
-}
+// ─── Companies (global catalog) ──────────────────────────────────────────
 
 export function subscribeCareerCompanies(roleId = "all", onChange, onError) {
-  if (!db) return notifyConfigError(onChange, onError);
-
+  if (!db) {
+    onChange([]);
+    onError?.(new Error("Firebase not configured."));
+    return () => {};
+  }
   return onSnapshot(
     query(collection(db, "companies"), ...roleConstraints(roleId), limit(200)),
-    (snapshot) => {
-      onChange(snapshot.docs.map(withId).sort(sortCompanies));
-    },
+    (snap) => onChange(snap.docs.map(withId).sort(sortCompanies)),
     onError,
   );
 }
+
+// ─── Jobs (per-user) ─────────────────────────────────────────────────────
 
 export function subscribeCareerJobs(roleId = "all", onChange, onError) {
-  if (!db) return notifyConfigError(onChange, onError);
-
-  return onSnapshot(
-    query(collection(db, "jobs"), ...roleConstraints(roleId), limit(200)),
-    (snapshot) => {
-      onChange(snapshot.docs.map(withId).sort(sortJobs));
-    },
-    onError,
-  );
+  if (!db || !auth?.currentUser) {
+    onChange([]);
+    onError?.(new Error("Sign in required."));
+    return () => {};
+  }
+  try {
+    return onSnapshot(
+      query(userCol("jobs"), ...roleConstraints(roleId), limit(200)),
+      (snap) => onChange(snap.docs.map(withId).sort(sortJobs)),
+      onError,
+    );
+  } catch (err) {
+    onError?.(err);
+    return () => {};
+  }
 }
+
+export async function saveJobForUser(job) {
+  const id = job.id || slugify(`${job.companyName}-${job.title}-${Date.now()}`);
+  await setDoc(
+    userDoc("jobs", id),
+    {
+      ...job,
+      id,
+      status: job.status || "saved",
+      roleIds: job.roleIds || [],
+      firstSeenAt: job.firstSeenAt || serverTimestamp(),
+      lastScannedAt: job.lastScannedAt || serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+  return id;
+}
+
+export async function updateJob(jobId, patch) {
+  await updateDoc(userDoc("jobs", jobId), {
+    ...patch,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteJob(jobId) {
+  await deleteDoc(userDoc("jobs", jobId));
+}
+
+// ─── Search runs (per-user) ──────────────────────────────────────────────
 
 export async function createCareerSearchRun({
   roleId,
@@ -146,17 +165,17 @@ export async function createCareerSearchRun({
   radiusKm,
   companyId,
 }) {
-  const firestore = requireFirestore();
-  const docRef = await addDoc(collection(firestore, "searchRuns"), {
-    roleId,
-    query: searchQuery.trim(),
-    location: location.trim() || "Bengaluru",
+  const uid = requireUid();
+  const docRef = await addDoc(userCol("searchRuns"), {
+    roleId: roleId || "all",
+    query: (searchQuery || "").trim(),
+    location: (location || "Bengaluru").trim(),
     radiusKm: Number(radiusKm) || 20,
     companyId: companyId || null,
     status: "queued",
     resultCount: 0,
     error: null,
-    requestedBy: auth?.currentUser?.uid || null,
+    requestedBy: uid,
     createdAt: serverTimestamp(),
     startedAt: null,
     completedAt: null,
@@ -171,50 +190,39 @@ export async function createCareerSearchRun({
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ searchRunId: docRef.id }),
+    body: JSON.stringify({ searchRunId: docRef.id, userId: uid }),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const text = await response.text();
     throw new Error(
-      `Search run was created but worker trigger failed: ${
-        errorText || response.statusText
-      }`,
+      `Search created but worker trigger failed: ${text || response.statusText}`,
     );
   }
-
   return docRef.id;
 }
 
 export function subscribeCareerSearchRun(searchRunId, onChange, onError) {
-  if (!searchRunId) return () => {};
-  if (!db) return notifyConfigError(() => onChange(null), onError);
-
+  if (!searchRunId || !db || !auth?.currentUser) {
+    onChange(null);
+    return () => {};
+  }
   return onSnapshot(
-    doc(db, "searchRuns", searchRunId),
-    (snapshot) => {
-      onChange(snapshot.exists() ? withId(snapshot) : null);
-    },
+    userDoc("searchRuns", searchRunId),
+    (snap) => onChange(snap.exists() ? withId(snap) : null),
     onError,
   );
 }
 
 export function subscribeCareerSearchRuns(onChange, onError) {
-  if (!db) return notifyConfigError(onChange, onError);
-  const uid = auth?.currentUser?.uid;
-  if (!uid) {
+  if (!db || !auth?.currentUser) {
     onChange([]);
     return () => {};
   }
-
   return onSnapshot(
-    query(
-      collection(db, "searchRuns"),
-      where("requestedBy", "==", uid),
-      limit(20),
-    ),
-    (snapshot) => {
-      const runs = snapshot.docs
+    query(userCol("searchRuns"), limit(20)),
+    (snap) => {
+      const runs = snap.docs
         .map(withId)
         .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
       onChange(runs);
@@ -223,59 +231,105 @@ export function subscribeCareerSearchRuns(onChange, onError) {
   );
 }
 
+// ─── Pipeline (kanban applications, per-user) ─────────────────────────────
+
+export function subscribePipeline(onChange, onError) {
+  if (!db || !auth?.currentUser) {
+    onChange([]);
+    return () => {};
+  }
+  return onSnapshot(
+    query(userCol("pipeline"), limit(500)),
+    (snap) => {
+      const items = snap.docs
+        .map(withId)
+        .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+      onChange(items);
+    },
+    onError,
+  );
+}
+
+export async function upsertPipelineEntry(entry) {
+  const id =
+    entry.id || `app_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  await setDoc(
+    userDoc("pipeline", id),
+    {
+      ...entry,
+      id,
+      stage: entry.stage || "wishlist",
+      createdAt: entry.createdAt || serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+  return id;
+}
+
+export async function deletePipelineEntry(id) {
+  await deleteDoc(userDoc("pipeline", id));
+}
+
+// ─── Storage helpers ─────────────────────────────────────────────────────
+
 export async function getCareerStorageUrl(storagePath) {
   if (!storagePath) return null;
   if (/^https?:\/\//.test(storagePath)) return storagePath;
   if (!storage) throw new Error("Firebase Storage is not configured.");
-
   return getDownloadURL(ref(storage, storagePath));
 }
 
-export async function seedCareerData() {
+// ─── Seed: shared companies catalog ──────────────────────────────────────
+
+function uniqueSeedCompanies() {
+  const byId = new Map();
+  for (const company of [...DEFAULT_COMPANIES, ...seedCompaniesData]) {
+    const id = company.id || slugify(company.name);
+    const existing = byId.get(id);
+    byId.set(id, {
+      ...existing,
+      ...company,
+      id,
+      roleIds: company.roleIds ||
+        existing?.roleIds || ["mobile_frontend", "product_manager"],
+      tags: [...new Set([...(existing?.tags || []), ...(company.tags || [])])],
+      priority: Math.max(existing?.priority || 0, company.priority || 1),
+      seededAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
+  return [...byId.values()];
+}
+
+export async function seedCompaniesCatalog() {
   const firestore = requireFirestore();
-  const seedJobs = seedJobsData;
-  const seedCompanies = uniqueSeedCompanies();
-
-  let syncedJobs = 0;
-  let syncedCompanies = 0;
+  const companies = uniqueSeedCompanies();
   const batchSize = 450;
-
-  for (let i = 0; i < seedJobs.length; i += batchSize) {
-    const batch = seedJobs.slice(i, i + batchSize);
-    const promises = batch.map((job) => {
-      const { id, ...data } = job;
-      const docRef = doc(firestore, "jobs", id);
-      return setDoc(
-        docRef,
-        {
-          ...data,
-          firstSeenAt: data.firstSeenAt || new Date().toISOString(),
-          lastScannedAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-    });
-    await Promise.all(promises);
-    syncedJobs += batch.length;
+  let synced = 0;
+  for (let i = 0; i < companies.length; i += batchSize) {
+    const batch = companies.slice(i, i + batchSize);
+    await Promise.all(
+      batch.map(({ id, ...data }) =>
+        setDoc(doc(firestore, "companies", id), data, { merge: true }),
+      ),
+    );
+    synced += batch.length;
   }
+  return { syncedCompanies: synced };
+}
 
-  for (let i = 0; i < seedCompanies.length; i += batchSize) {
-    const batch = seedCompanies.slice(i, i + batchSize);
-    const promises = batch.map((company) => {
-      const { id, ...data } = company;
-      const docRef = doc(firestore, "companies", id);
-      return setDoc(docRef, data, { merge: true });
-    });
-    await Promise.all(promises);
-    syncedCompanies += batch.length;
-  }
+// Back-compat alias.
+export const seedCareerData = seedCompaniesCatalog;
 
-  return {
-    syncedCount: syncedJobs,
-    syncedJobs,
-    syncedCompanies,
-    loadedCount: seedJobs.length,
-    matchedCount: seedJobs.length,
-  };
+export async function getCareerCompanies(roleId = "all") {
+  const firestore = requireFirestore();
+  const snapshot = await getDocs(
+    query(
+      collection(firestore, "companies"),
+      ...roleConstraints(roleId),
+      limit(200),
+    ),
+  );
+  return snapshot.docs.map(withId).sort(sortCompanies);
 }

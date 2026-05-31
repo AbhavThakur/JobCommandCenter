@@ -5,41 +5,62 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null;
     }
-
-    function ownsRequestedSearchRun() {
-      return signedIn() && resource.data.requestedBy == request.auth.uid;
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
     }
 
-    function createsOwnQueuedSearchRun() {
-      return signedIn()
-        && request.resource.data.requestedBy == request.auth.uid
-        && request.resource.data.status == 'queued';
+    // Shared catalog
+    match /companies/{companyId} {
+      allow read: if signedIn();
+      allow write: if signedIn();
     }
-
     match /roles/{roleId} {
       allow read: if signedIn();
       allow write: if false;
     }
 
-    match /companies/{companyId} {
-      allow read: if signedIn();
-      allow write: if signedIn();
-    }
+    // Per-user: profile, jobs, searchRuns, pipeline, reports.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
 
-    match /jobs/{jobId} {
-      allow read: if signedIn();
-      allow write: if signedIn();
-    }
-
-    match /reports/{reportId} {
-      allow read: if signedIn();
-      allow write: if false;
-    }
-
-    match /searchRuns/{searchRunId} {
-      allow create: if createsOwnQueuedSearchRun();
-      allow read: if ownsRequestedSearchRun();
-      allow update, delete: if false;
+      match /jobs/{jobId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /searchRuns/{runId} {
+        allow read: if isOwner(uid);
+        // User can create queued runs; worker (admin SDK) bypasses for updates.
+        allow create: if isOwner(uid)
+          && request.resource.data.status == 'queued';
+        allow update, delete: if false;
+      }
+      match /pipeline/{appId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /reports/{reportId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+      match /learning/{itemId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /flashcards/{cardId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /habits/{habitId} {
+        allow read, write: if isOwner(uid);
+        match /checkins/{dateKey} {
+          allow read, write: if isOwner(uid);
+        }
+      }
+      match /clientState/{key} {
+        allow read, write: if isOwner(uid);
+      }
+      match /chats/{chatId} {
+        allow read, write: if isOwner(uid);
+        match /messages/{msgId} {
+          allow read, write: if isOwner(uid);
+        }
+      }
     }
 
     match /{document=**} {

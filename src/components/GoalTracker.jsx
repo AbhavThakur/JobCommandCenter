@@ -159,7 +159,7 @@ export default function GoalTracker() {
       )}
 
       {active.length === 0 && !adding && (
-        <div style={s.empty}>No active goals — add one above ↑</div>
+        <div style={s.empty}>No active goals — hit + New goal to start</div>
       )}
 
       {active.map((goal) => (

@@ -5,6 +5,10 @@ import WealthCard from "../components/WealthCard";
 import DailyScore from "../components/DailyScore";
 import DailyJournal from "../components/DailyJournal";
 import GoalTracker from "../components/GoalTracker";
+import LearningWidget from "../components/LearningWidget";
+import HabitsWidget from "../components/HabitsWidget";
+import StreaksCard from "../components/StreaksCard";
+import TodayTop3 from "../components/TodayTop3";
 import { useAuth } from "../context/AuthContext";
 
 function getGreeting() {
@@ -24,7 +28,7 @@ function fmtDate(d) {
   });
 }
 
-export default function GrowthDashboard() {
+export default function GrowthDashboard({ setPage }) {
   const { user } = useAuth() ?? {};
   const [now, setNow] = useState(() => new Date());
 
@@ -73,6 +77,12 @@ export default function GrowthDashboard() {
         <DailyScore />
       </div>
 
+      {/* Today's top 3 + Streaks */}
+      <TodayTop3 setPage={setPage} />
+      <div style={{ marginBottom: 20 }}>
+        <StreaksCard />
+      </div>
+
       {/* Full width row 1 — Race / Active Goal */}
       <RaceRadar />
 
@@ -83,6 +93,8 @@ export default function GrowthDashboard() {
           <DailyJournal />
         </div>
         <div style={styles.col1of3}>
+          <HabitsWidget onOpen={() => setPage?.("habits")} />
+          <LearningWidget onOpen={() => setPage?.("learning")} />
           <WealthCard />
           <GoalTracker />
         </div>
@@ -166,13 +178,13 @@ const styles = {
     marginBottom: 40,
   },
   col2of3: {
-    flex: "2 1 400px",
+    flex: "2 1 340px",
     display: "flex",
     flexDirection: "column",
     gap: 20,
   },
   col1of3: {
-    flex: "1 1 200px",
+    flex: "1 1 260px",
     display: "flex",
     flexDirection: "column",
     gap: 20,

@@ -1,6 +1,14 @@
-import { useState, useMemo } from "react";
-import { useStore } from "../store/useStore";
+import { useEffect, useMemo, useState } from "react";
+import { FileDown, FileText } from "lucide-react";
 import { STAGES } from "../data/constants";
+import {
+  deletePipelineEntry,
+  getCareerStorageUrl,
+  subscribeCareerJobs,
+  subscribePipeline,
+  upsertPipelineEntry,
+} from "../services/careerData";
+import { useAuth } from "../context/AuthContext";
 
 const EMPTY_FORM = {
   company: "",
@@ -9,49 +17,79 @@ const EMPTY_FORM = {
   stage: "wishlist",
   salary: "",
   notes: "",
+  jobId: "",
 };
 
-export default function Tracker() {
-  const {
-    activeProfile,
-    applications,
-    addApplication,
-    updateApplication,
-    deleteApplication,
-    moveApplication,
-    logDailyActivity,
-  } = useStore();
+function StorageLink({ storagePath, icon: Icon, children }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!storagePath) {
+      setUrl("");
+      return;
+    }
+    let cancelled = false;
+    getCareerStorageUrl(storagePath)
+      .then((u) => !cancelled && setUrl(u || ""))
+      .catch(() => !cancelled && setUrl(""));
+    return () => {
+      cancelled = true;
+    };
+  }, [storagePath]);
+  if (!url) return null;
+  return (
+    <a className="kcard-link" href={url} target="_blank" rel="noreferrer">
+      {Icon && <Icon size={12} />} {children}
+    </a>
+  );
+}
 
+export default function Tracker() {
+  const { user } = useAuth();
+  const isSignedIn = user && !user.isOffline;
+
+  const [apps, setApps] = useState([]);
+  const [jobs, setJobs] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [filterStage, setFilterStage] = useState("all");
+  const [error, setError] = useState("");
 
-  const myApps = useMemo(
-    () => applications.filter((a) => a.profile === activeProfile),
-    [applications, activeProfile],
-  );
+  useEffect(() => {
+    if (!isSignedIn) {
+      setApps([]);
+      return undefined;
+    }
+    return subscribePipeline(setApps, (err) => setError(err.message));
+  }, [isSignedIn]);
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      setJobs([]);
+      return undefined;
+    }
+    return subscribeCareerJobs("all", setJobs, () => {});
+  }, [isSignedIn]);
+
+  const jobsById = useMemo(() => {
+    const m = new Map();
+    jobs.forEach((j) => m.set(j.id, j));
+    return m;
+  }, [jobs]);
 
   const grouped = useMemo(() => {
     const groups = {};
     STAGES.forEach((s) => (groups[s.id] = []));
     const list =
       filterStage === "all"
-        ? myApps
-        : myApps.filter((a) => a.stage === filterStage);
+        ? apps
+        : apps.filter((a) => a.stage === filterStage);
     list.forEach((a) => {
-      if (groups[a.stage]) groups[a.stage].push(a);
+      const stage = a.stage in groups ? a.stage : "wishlist";
+      groups[stage].push(a);
     });
-    // Sort each group by updatedAt desc
-    Object.values(groups).forEach((arr) =>
-      arr.sort((a, b) =>
-        (b.updatedAt || b.date || "").localeCompare(
-          a.updatedAt || a.date || "",
-        ),
-      ),
-    );
     return groups;
-  }, [myApps, filterStage]);
+  }, [apps, filterStage]);
 
   const openAdd = () => {
     setEditId(null);
@@ -62,36 +100,42 @@ export default function Tracker() {
   const openEdit = (app) => {
     setEditId(app.id);
     setForm({
-      company: app.company,
-      role: app.role,
+      company: app.company || "",
+      role: app.role || "",
       link: app.link || "",
-      stage: app.stage,
+      stage: app.stage || "wishlist",
       salary: app.salary || "",
       notes: app.notes || "",
+      jobId: app.jobId || "",
     });
     setShowModal(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.company.trim() || !form.role.trim()) return;
-
-    if (editId) {
-      updateApplication(editId, form);
-    } else {
-      addApplication({ ...form, profile: activeProfile });
-      logDailyActivity();
-    }
-    setShowModal(false);
-  };
-
-  const handleDelete = (id) => {
-    if (window.confirm("Delete this application?")) {
-      deleteApplication(id);
+    try {
+      await upsertPipelineEntry({ id: editId || undefined, ...form });
+      setShowModal(false);
+    } catch (err) {
+      setError(err.message);
     }
   };
 
-  const handleMove = (id, newStage) => {
-    moveApplication(id, newStage);
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this application?")) return;
+    try {
+      await deletePipelineEntry(id);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleMove = async (app, newStage) => {
+    try {
+      await upsertPipelineEntry({ ...app, stage: newStage });
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const stageIdx = (stageId) => STAGES.findIndex((s) => s.id === stageId);
@@ -99,7 +143,7 @@ export default function Tracker() {
   return (
     <div className="tracker-page">
       <div className="page-header">
-        <h2>📋 Application Tracker</h2>
+        <h2>Application Tracker</h2>
         <div className="header-actions">
           <select
             className="filter-select"
@@ -113,13 +157,21 @@ export default function Tracker() {
               </option>
             ))}
           </select>
-          <button className="btn btn-accent" onClick={openAdd}>
-            ＋ Add Application
+          <button
+            className="btn btn-accent"
+            onClick={openAdd}
+            disabled={!isSignedIn}
+          >
+            + Add Application
           </button>
         </div>
       </div>
 
-      {/* Kanban */}
+      {error && <p className="hint hint-error">{error}</p>}
+      {!isSignedIn && (
+        <p className="hint">Sign in to use the cloud-synced pipeline.</p>
+      )}
+
       <div className="kanban">
         {STAGES.map((stage) => (
           <div key={stage.id} className="kanban-col">
@@ -130,63 +182,82 @@ export default function Tracker() {
               <span className="kanban-count">{grouped[stage.id].length}</span>
             </div>
             <div className="kanban-cards">
-              {grouped[stage.id].map((app) => (
-                <div key={app.id} className="kanban-card">
-                  <div className="kcard-top">
-                    <strong>{app.company}</strong>
-                    <div className="kcard-actions">
-                      <button title="Edit" onClick={() => openEdit(app)}>
-                        ✏️
-                      </button>
-                      <button
-                        title="Delete"
-                        onClick={() => handleDelete(app.id)}
+              {grouped[stage.id].map((app) => {
+                const job = app.jobId ? jobsById.get(app.jobId) : null;
+                return (
+                  <div key={app.id} className="kanban-card">
+                    <div className="kcard-top">
+                      <strong>{app.company}</strong>
+                      <div className="kcard-actions">
+                        <button title="Edit" onClick={() => openEdit(app)}>
+                          ✏️
+                        </button>
+                        <button
+                          title="Delete"
+                          onClick={() => handleDelete(app.id)}
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                    <span className="kcard-role">{app.role}</span>
+                    {app.salary && (
+                      <span className="kcard-salary">💰 {app.salary}</span>
+                    )}
+                    {app.link && (
+                      <a
+                        className="kcard-link"
+                        href={app.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
                       >
-                        🗑️
-                      </button>
+                        View Job →
+                      </a>
+                    )}
+                    {job && (
+                      <div className="kcard-attachments">
+                        {typeof job.score === "number" && (
+                          <span className="badge">Score {job.score}</span>
+                        )}
+                        <StorageLink
+                          storagePath={job.reportStoragePath}
+                          icon={FileText}
+                        >
+                          Report
+                        </StorageLink>
+                        <StorageLink
+                          storagePath={job.pdfStoragePath}
+                          icon={FileDown}
+                        >
+                          Tailored CV
+                        </StorageLink>
+                      </div>
+                    )}
+                    <div className="kcard-moves">
+                      {stageIdx(app.stage) > 0 && (
+                        <button
+                          className="move-btn"
+                          onClick={() =>
+                            handleMove(app, STAGES[stageIdx(app.stage) - 1].id)
+                          }
+                        >
+                          ← {STAGES[stageIdx(app.stage) - 1].icon}
+                        </button>
+                      )}
+                      {stageIdx(app.stage) < STAGES.length - 1 && (
+                        <button
+                          className="move-btn"
+                          onClick={() =>
+                            handleMove(app, STAGES[stageIdx(app.stage) + 1].id)
+                          }
+                        >
+                          {STAGES[stageIdx(app.stage) + 1].icon} →
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <span className="kcard-role">{app.role}</span>
-                  {app.salary && (
-                    <span className="kcard-salary">💰 {app.salary}</span>
-                  )}
-                  {app.link && (
-                    <a
-                      className="kcard-link"
-                      href={app.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      View Job →
-                    </a>
-                  )}
-                  <div className="kcard-moves">
-                    {stageIdx(app.stage) > 0 && (
-                      <button
-                        className="move-btn"
-                        onClick={() =>
-                          handleMove(app.id, STAGES[stageIdx(app.stage) - 1].id)
-                        }
-                      >
-                        ← {STAGES[stageIdx(app.stage) - 1].icon}
-                      </button>
-                    )}
-                    {stageIdx(app.stage) < STAGES.length - 1 && (
-                      <button
-                        className="move-btn"
-                        onClick={() =>
-                          handleMove(app.id, STAGES[stageIdx(app.stage) + 1].id)
-                        }
-                      >
-                        {STAGES[stageIdx(app.stage) + 1].icon} →
-                      </button>
-                    )}
-                  </div>
-                  <span className="kcard-date">
-                    {app.updatedAt || app.date}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
               {grouped[stage.id].length === 0 && (
                 <div className="kanban-empty">No items</div>
               )}
@@ -195,7 +266,6 @@ export default function Tracker() {
         ))}
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -208,7 +278,6 @@ export default function Tracker() {
                   onChange={(e) =>
                     setForm({ ...form, company: e.target.value })
                   }
-                  placeholder="Company name"
                 />
               </div>
               <div className="field">
@@ -216,7 +285,6 @@ export default function Tracker() {
                 <input
                   value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
-                  placeholder="Job title"
                 />
               </div>
               <div className="field">
@@ -224,8 +292,21 @@ export default function Tracker() {
                 <input
                   value={form.link}
                   onChange={(e) => setForm({ ...form, link: e.target.value })}
-                  placeholder="https://..."
                 />
+              </div>
+              <div className="field">
+                <label>Linked Job (optional)</label>
+                <select
+                  value={form.jobId}
+                  onChange={(e) => setForm({ ...form, jobId: e.target.value })}
+                >
+                  <option value="">— None —</option>
+                  {jobs.map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {j.companyName} · {j.title}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="field">
                 <label>Stage</label>
@@ -245,7 +326,6 @@ export default function Tracker() {
                 <input
                   value={form.salary}
                   onChange={(e) => setForm({ ...form, salary: e.target.value })}
-                  placeholder="e.g. 30-40 LPA"
                 />
               </div>
               <div className="field full">
@@ -254,7 +334,6 @@ export default function Tracker() {
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={3}
-                  placeholder="Any notes..."
                 />
               </div>
             </div>

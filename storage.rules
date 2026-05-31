@@ -5,12 +5,24 @@ service firebase.storage {
     function signedIn() {
       return request.auth != null;
     }
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
 
+    // Per-user resume + reports + pdfs. Owner can read; worker (admin SDK)
+    // bypasses these rules for report/pdf uploads.
+    match /users/{uid}/{allPaths=**} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|text/.*');
+    }
+
+    // Legacy shared paths — readable only.
     match /reports/{allPaths=**} {
       allow read: if signedIn();
       allow write: if false;
     }
-
     match /pdfs/{allPaths=**} {
       allow read: if signedIn();
       allow write: if false;

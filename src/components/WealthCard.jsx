@@ -211,7 +211,7 @@ export default function WealthCard() {
         </span>
       </div>
 
-      {!ulipDismissed && (
+      {!ulipDismissed && data.netWorth !== "0" && (
         <div style={styles.alertBanner}>
           <AlertTriangle size={14} color="var(--amber)" />
           <span style={styles.alertText}>

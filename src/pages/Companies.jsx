@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Database } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { PROFILES, ZONE_LABELS } from "../data/constants";
-import { seedCareerData, subscribeCareerCompanies } from "../services/careerData";
-import { useStore } from "../store/useStore";
+import { ZONE_LABELS } from "../data/constants";
+import {
+  CAREER_ROLES,
+  DEFAULT_CAREER_ROLE_ID,
+  getCareerRole,
+} from "../data/careerRoles";
+import {
+  seedCareerData,
+  subscribeCareerCompanies,
+} from "../services/careerData";
+import { subscribeUserProfile } from "../services/userProfile";
 
 const ZONES = ["doorstep", "close", "nearby", "far"];
-const PROFILE_ROLE_IDS = {
-  abhav: "mobile_frontend",
-  wife: "product_manager",
-};
 
 function formatDate(value) {
   if (!value) return "-";
@@ -18,17 +22,12 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
 }
 
-function matchesProfile(company, activeProfile) {
-  if (company.profile === activeProfile || company.profile === "both") return true;
-  const roleId = PROFILE_ROLE_IDS[activeProfile];
-  return Array.isArray(company.roleIds) && company.roleIds.includes(roleId);
-}
-
 export default function Companies() {
   const { user } = useAuth();
   const isSignedIn = user && !user.isOffline;
-  const { activeProfile } = useStore();
-  const profile = PROFILES[activeProfile];
+
+  const [roleId, setRoleId] = useState(DEFAULT_CAREER_ROLE_ID);
+  const role = getCareerRole(roleId);
 
   const [companies, setCompanies] = useState([]);
   const [zoneFilter, setZoneFilter] = useState("all");
@@ -61,9 +60,12 @@ export default function Companies() {
   }, [isSignedIn]);
 
   const filtered = useMemo(() => {
-    let list = companies.filter((company) =>
-      matchesProfile(company, activeProfile),
-    );
+    let list = companies;
+    if (roleId !== "all") {
+      list = list.filter(
+        (c) => Array.isArray(c.roleIds) && c.roleIds.includes(roleId),
+      );
+    }
     if (zoneFilter !== "all") {
       list = list.filter((company) => company.zone === zoneFilter);
     }
@@ -71,10 +73,18 @@ export default function Companies() {
       list = list.filter((company) => company.priority === 3);
     }
     return [...list].sort((a, b) => (a.dist || 0) - (b.dist || 0));
-  }, [companies, activeProfile, zoneFilter, topFit]);
+  }, [companies, roleId, zoneFilter, topFit]);
+
+  useEffect(() => {
+    if (!isSignedIn) return undefined;
+    return subscribeUserProfile((profile) => {
+      const prefRole = profile?.preferences?.roleId;
+      if (prefRole) setRoleId(prefRole);
+    });
+  }, [isSignedIn]);
 
   const getCareerUrl = (company) => {
-    const kw = encodeURIComponent(profile.defaultKw);
+    const kw = encodeURIComponent(role?.keywords?.[0] || "");
     return String(company.url || "#").replace("{{KW}}", kw);
   };
 
@@ -124,19 +134,23 @@ export default function Companies() {
       </div>
 
       <p className="filter-summary">
-        Showing {filtered.length} companies for {profile.name}
+        Showing {filtered.length} companies for {role?.label || "all roles"}
         {zoneFilter !== "all" && ` · ${ZONE_LABELS[zoneFilter]}`}
         {topFit && " · Top Priority Only"}
       </p>
 
       {!isSignedIn && (
         <div className="empty-state">
-          Sign in with email/password or Google to view Firestore career companies.
+          Sign in with email/password or Google to view Firestore career
+          companies.
         </div>
       )}
 
       {isSignedIn && !isLoading && (
-        <div className="card" style={{ textAlign: "center", padding: "1.5rem" }}>
+        <div
+          className="card"
+          style={{ textAlign: "center", padding: "1.5rem" }}
+        >
           <p style={{ marginBottom: "0.75rem" }}>
             {companies.length === 0
               ? "No companies in Firestore yet. Seed target companies and jobs?"
@@ -152,7 +166,8 @@ export default function Companies() {
           </button>
           {seedResult && (
             <p style={{ marginTop: "0.75rem", color: "var(--accent)" }}>
-              Synced {seedResult.syncedCompanies} companies and {seedResult.syncedJobs} jobs.
+              Synced {seedResult.syncedCompanies} companies and{" "}
+              {seedResult.syncedJobs} jobs.
             </p>
           )}
         </div>
@@ -168,7 +183,10 @@ export default function Companies() {
 
       <div className="company-grid">
         {filtered.map((company) => (
-          <div key={company.id || company.name} className={`company-card zone-${company.zone}`}>
+          <div
+            key={company.id || company.name}
+            className={`company-card zone-${company.zone}`}
+          >
             <div className="ccard-top">
               <strong>{company.name}</strong>
               <div className="priority-dots">
@@ -191,7 +209,10 @@ export default function Companies() {
               ))}
             </div>
             <div className="job-meta-grid">
-              <span>Last scanned: {formatDate(company.lastScannedAt || company.updatedAt)}</span>
+              <span>
+                Last scanned:{" "}
+                {formatDate(company.lastScannedAt || company.updatedAt)}
+              </span>
               <span>Roles: {(company.roleIds || []).length || "-"}</span>
             </div>
             <div className="ccard-bottom">
@@ -208,11 +229,14 @@ export default function Companies() {
         ))}
       </div>
 
-      {isSignedIn && !isLoading && filtered.length === 0 && companies.length > 0 && (
-        <div className="empty-state">
-          <p>No companies match the current filters.</p>
-        </div>
-      )}
+      {isSignedIn &&
+        !isLoading &&
+        filtered.length === 0 &&
+        companies.length > 0 && (
+          <div className="empty-state">
+            <p>No companies match the current filters.</p>
+          </div>
+        )}
     </div>
   );
 }

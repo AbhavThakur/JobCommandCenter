@@ -11,13 +11,21 @@ import {
   LogOut,
   User,
   Zap,
+  FileText,
+  GraduationCap,
+  BookOpen,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const NAV_ITEMS = [
   { id: "home", label: "Dashboard", icon: LayoutDashboard },
   { id: "progress", label: "Progress", icon: BarChart2 },
+  { id: "profile", label: "Profile", icon: FileText },
   { id: "career", label: "Career", icon: Briefcase },
+  { id: "learning", label: "Learning", icon: BookOpen },
+  { id: "habits", label: "Habits", icon: Activity },
+  { id: "interview-prep", label: "Interview Prep", icon: GraduationCap },
   { id: "health", label: "Health", icon: Dumbbell },
   { id: "wealth", label: "Wealth", icon: TrendingUp },
   { id: "ailab", label: "AI Lab", icon: Sparkles },

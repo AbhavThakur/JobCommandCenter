@@ -53,23 +53,24 @@ export default function RaceRadar() {
     return (
       <div style={styles.card}>
         <div style={styles.headerRow}>
-          <span style={styles.emoji}>🎉</span>
-          <span style={styles.raceName}>Race Complete!</span>
+          <span style={styles.emoji}>{nextGoal ? "🎯" : "🏃"}</span>
+          <span style={styles.raceName}>
+            {nextGoal ? "Next Race Goal" : "Set a race goal"}
+          </span>
         </div>
         {nextGoal ? (
           <div style={styles.postRaceGoal}>
-            <div style={styles.postRaceLabel}>Next Goal</div>
+            <div style={styles.postRaceLabel}>Goal</div>
             <div style={styles.postRaceValue}>{nextGoal}</div>
-            <button
-              style={styles.clearBtn}
-              onClick={() => setNextGoal("")}
-            >
+            <button style={styles.clearBtn} onClick={() => setNextGoal("")}>
               Clear & set new goal
             </button>
           </div>
         ) : (
           <div style={styles.postRaceForm}>
-            <div style={styles.postRaceLabel}>What's next?</div>
+            <div style={styles.postRaceLabel}>
+              What's your next race target?
+            </div>
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <input
                 type="text"
@@ -104,14 +105,18 @@ export default function RaceRadar() {
           <svg viewBox="0 0 100 100" style={styles.ring}>
             {/* Track */}
             <circle
-              cx="50" cy="50" r="42"
+              cx="50"
+              cy="50"
+              r="42"
               fill="none"
               stroke="rgba(255,255,255,0.06)"
               strokeWidth="5"
             />
             {/* Progress */}
             <circle
-              cx="50" cy="50" r="42"
+              cx="50"
+              cy="50"
+              r="42"
               fill="none"
               stroke="var(--teal)"
               strokeWidth="5"
@@ -127,7 +132,8 @@ export default function RaceRadar() {
             />
             {/* Center text */}
             <text
-              x="50" y="46"
+              x="50"
+              y="46"
               textAnchor="middle"
               fill="var(--text)"
               fontFamily="var(--mono)"
@@ -137,7 +143,8 @@ export default function RaceRadar() {
               {daysRemaining}
             </text>
             <text
-              x="50" y="60"
+              x="50"
+              y="60"
               textAnchor="middle"
               fill="var(--muted)"
               fontFamily="var(--sans)"
@@ -157,13 +164,9 @@ export default function RaceRadar() {
             {daysRemaining} {daysRemaining === 1 ? "Day" : "Days"} to Greatness
           </div>
           <div style={styles.meta}>
-            <span style={styles.metaItem}>
-              🎯 {GOAL}
-            </span>
+            <span style={styles.metaItem}>🎯 {GOAL}</span>
             <span style={styles.metaDot}>·</span>
-            <span style={styles.metaItem}>
-              Pace: {TARGET_PACE}
-            </span>
+            <span style={styles.metaItem}>Pace: {TARGET_PACE}</span>
             <span style={styles.metaDot}>·</span>
             <span style={styles.metaItem}>
               Week {currentWeek}/{TRAINING_WEEKS}
@@ -174,8 +177,8 @@ export default function RaceRadar() {
             <div style={styles.taperInfo}>
               <div style={styles.taperTitle}>Phase: Tapering</div>
               <div style={styles.taperText}>
-                Reduce mileage, keep intensity. Focus on mobility &amp; carb-loading.
-                Limit runs to 5km.
+                Reduce mileage, keep intensity. Focus on mobility &amp;
+                carb-loading. Limit runs to 5km.
               </div>
             </div>
           )}
